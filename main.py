@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pwinput  # type: ignore
 
-url = "http://localhost:3000/medicamentos"
-url_login = "http://localhost:3000/login"
+url = "http://localhost:3003/medicamentos"
+url_farmacia = "http://localhost:3003/farmacia"
+url_login = "http://localhost:3003/login"
 
 usuario_id = ""
 token = ""
@@ -65,7 +66,8 @@ def inclusao():
 def listagem():
     titulo("Listagem dos medicamentos Cadastrados")
 
-    response = requests.get(url)
+    response = requests.get(url,
+                             headers={"Authorization": f"Bearer {token}"})
 
     if response.status_code != 200:
         print("Erro... Não foi possível acessar a API")
@@ -73,12 +75,12 @@ def listagem():
 
     medicamentos = response.json()
 
-    print("Cód. Barras.............: Nome .........: Estoque: Preço R$:")
-    print("------------------------------------------------------------")
+    print("Cód. Nome.............: Estoque: Preço R$:")
+    print("-------------------------------------------")
 
     for medicamento in medicamentos:
         print(
-            f"{medicamento['codigo_barras']:4d} {medicamento['nomeMedicamento']:20s} {medicamento['estoque']:15s} {float(medicamento['preco']):9.2f}")
+            f"{int(medicamento['id']):4d} {medicamento['nomeMedicamento']:20s} {int(medicamento['estoque']):5d} {float(medicamento['preco']):9.2f}")
 
 
 def alteracao():
@@ -99,18 +101,18 @@ def alteracao():
         print("Erro... Informe um código existente")
         return
 
-    print(f"\Nome do medicamento.: {medicamento[0]['nomeMedicamento']}")
+    print(f"Nome do medicamento.: {medicamento[0]['nomeMedicamento']}")
     print(f"codigo_barras........: {medicamento[0]['codigo_barras']}")
     print(f"estoque..............: {medicamento[0]['estoque']}")
     print(f"Preço R$.............: {float(medicamento[0]['preco']):9.2f}")
 
     novoPreco = float(input("Novo Preço R$: "))
 
-    response = requests.put(url+"/"+str(id),
+    response = requests.patch(url+"/"+str(id),
                               headers={"Authorization": f"Bearer {token}"},
                               json={"preco": novoPreco})
 
-    if response.status_code == 200:
+    if response.status_code == 201:
         medicamento = response.json()
         print("Ok! medicamento alterado com sucesso!")
     else:
@@ -138,7 +140,7 @@ def exclusao():
         print("Erro... Informe um código existente")
         return
 
-    print(f"\Nome do medicamento.: {medicamento[0]['nomeMedicamento']}")
+    print(f"Nome do medicamento.: {medicamento[0]['nomeMedicamento']}")
     print(f"codigo_barras........: {medicamento[0]['codigo_barras']}")
     print(f"estoque..............: {medicamento[0]['estoque']}")
     print(f"Preço R$.............: {float(medicamento[0]['preco']):9.2f}")
@@ -156,7 +158,7 @@ def exclusao():
             print("Erro... Não foi possível excluir este medicamento")
 
 
-def grafico():
+def grafico_por_estabelecimento():
     response = requests.get(url)
 
     if response.status_code != 200:
@@ -164,21 +166,21 @@ def grafico():
         return
 
     medicamentos = response.json()
-    labels = list(set([x['marca'] for x in medicamentos]))
+    labels = list(set([x['farmacia']['razaoSocial'] for x in medicamentos]))
     sizes = [0] * len(labels)
 
     for medicamento in medicamentos:
-        index = labels.index(medicamento['marca'])
+        index = labels.index(medicamento['farmacia']['razaoSocial'])
         sizes[index] += 1
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    ax.set_title('Nº Veículos por Marca')
-    plt.gcf().canvas.manager.set_window_title("Gráfico por Marcas")
+    ax.set_title('Nº de medicamentos por empresa')
+    plt.gcf().canvas.manager.set_window_title("Gráfico por Empresa")
     ax.pie(sizes, labels=labels)
     plt.show()
 
 
-def grafico2():
+def grafico_por_estoque():
     response = requests.get(url)
 
     if response.status_code != 200:
@@ -186,63 +188,18 @@ def grafico2():
         return
 
     medicamentos = response.json()
-    marcas = tuple(set([x['marca'] for x in medicamentos]))
-    quant_seminovos = [0] * len(marcas)
-    quant_usados = [0] * len(marcas)
+    nomes = [x['nomeMedicamento'] for x in medicamentos]
+    estoques = [x['estoque'] for x in medicamentos]
 
-    for medicamento in medicamentos:
-        index = marcas.index(medicamento['marca'])
-        if medicamento['ano'] == 2023 or medicamento['ano'] == 2024:
-            quant_seminovos[index] += 1
-        else:
-            quant_usados[index] += 1
-
-    tipos_quants = {
-        "Seminovos": quant_seminovos,
-        "Usados": quant_usados
-    }
-    width = 0.5
+    medicamentos_ordenados = sorted(zip(nomes, estoques), key=lambda x: x[1], reverse=True)
+    nomes_ordenados, estoques_ordenados = zip(*medicamentos_ordenados)
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    bottom = np.zeros(len(marcas))
-
-    for tipo, quants in tipos_quants.items():
-        p = ax.bar(marcas, quants, width, label=tipo, bottom=bottom)
-        bottom += quants
-
-    ax.set_title("Nº de Veículos por Marca e Tipo")
-    plt.gcf().canvas.manager.set_window_title("Gráfico por Marcas")
-    ax.legend(loc="upper left")
-
-    plt.show()
-
-def grafico3():
-    response = requests.get(url)
-
-    if response.status_code != 200:
-        print("Erro... Não foi possível acessar a API")
-        return
-
-    medicamentos = response.json()
-    combustiveis = tuple(set([x['combustivel'] for x in medicamentos]))
-    quants = [0] * len(combustiveis)
-
-    for medicamento in medicamentos:
-        index = combustiveis.index(medicamento['combustivel'])
-        quants[index] += 1
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-
-    y_pos = [i for i in range(len(combustiveis))]
 
     colors = ['blue', 'green', 'red', 'purple', 'orange', 'cyan', 'yellow']
-    ax.barh(y_pos, quants, align='center', color=colors)
-    ax.set_yticks(y_pos, labels=combustiveis)
-    ax.invert_yaxis()  # labels read top-to-bottom
-    ax.set_xlabel('Quantidades')
-    ax.set_title('Quantidade de medicamentos por Combustível')
-    plt.gcf().canvas.manager.set_window_title("Gráfico por Combustível")
-
+    ax.bar(nomes_ordenados, estoques_ordenados, color=colors)
+    ax.set_ylabel('Estoques')
+    ax.set_title('Medicamentos por estoques')
     plt.show()
 
 def titulo(texto, traco="-"):
@@ -258,10 +215,9 @@ while True:
     print("3. Listagem de medicamentos")
     print("4. Alteração de Preço")
     print("5. Exclusão de medicamento")
-    print("6. Gráfico de Marcas (Pizza)")
-    print("7. Gráfico de Marcas (Colunas Empilhadas)")
-    print("8. Gráfico de Combustíveis (Barras)")
-    print("9. Finalizar")
+    print("6. Gráfico de Medicamentos por Farmacias (Pizza)")
+    print("7. Gráfico de Medicamentos por Estoque (Colunas)")
+    print("8. Finalizar")
     opcao = int(input("Opção: "))
     if opcao == 1:
         login()
@@ -274,10 +230,8 @@ while True:
     elif opcao == 5:
         exclusao()
     elif opcao == 6:
-        grafico()
+        grafico_por_estabelecimento()
     elif opcao == 7:
-        grafico2()
-    elif opcao == 8:
-        grafico3()
+        grafico_por_estoque()
     else:
         break
